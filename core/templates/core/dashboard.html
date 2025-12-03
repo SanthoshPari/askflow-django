@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AskFlow – Project & Task Dashboard</title>
+
+    <!-- Bootstrap for quick styling -->
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    >
+
+    <style>
+        body {
+            padding: 20px;
+        }
+        .project-list {
+            max-height: 80vh;
+            overflow-y: auto;
+            border-right: 1px solid #ddd;
+        }
+        .project-item {
+            cursor: pointer;
+        }
+        .project-item.active {
+            background-color: #f0f0f0;
+            font-weight: 600;
+        }
+        .task-status-badge {
+            font-size: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <h1 class="mb-4">AskFlow – Project & Task Dashboard</h1>
+
+    <div class="row">
+        <!-- Left: Projects -->
+        <div class="col-md-3 project-list">
+            <h5>Projects</h5>
+            <ul class="list-group" id="projectList">
+                <!-- Projects will be injected here -->
+            </ul>
+        </div>
+
+        <!-- Right: Tasks -->
+        <div class="col-md-9">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 id="taskHeader">Select a project to view tasks</h5>
+            </div>
+
+            <table class="table table-striped table-bordered align-middle" id="taskTable">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                        <th>Due Date</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody id="taskTableBody">
+                    <!-- Tasks will be injected here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // -----------------------------
+    // CONFIG: API endpoints
+    // -----------------------------
+    const PROJECTS_API = "/api/ver2/projects/";
+    const TASKS_API = "/api/ver2/tasks/";
+
+    // Cache DOM elements
+    const projectListEl = document.getElementById("projectList");
+    const taskHeaderEl = document.getElementById("taskHeader");
+    const taskTableBodyEl = document.getElementById("taskTableBody");
+
+    // Keep track of selected project
+    let selectedProjectId = null;
+
+    // -----------------------------
+    // Fetch helper
+    // -----------------------------
+    async function fetchJSON(url) {
+        const response = await fetch(url, {
+            headers: {
+                "Accept": "application/json"
+            },
+            credentials: "same-origin"  // send cookies (sessionid) for auth
+        });
+
+        if (!response.ok) {
+            console.error("Request failed:", response.status, response.statusText);
+            throw new Error("HTTP error " + response.status);
+        }
+
+        return await response.json();
+    }
+
+    // -----------------------------
+    // Load projects and render list
+    // -----------------------------
+    async function loadProjects() {
+        try {
+            // Ask backend for first page of projects
+            const data = await fetchJSON(PROJECTS_API + "?page=1&page_size=100");
+
+            // Your API likely returns something like:
+            // { result: [...], page, page_size, total_pages, total_items }
+            // but we make this robust to a few possible shapes.
+            let projects = [];
+
+            if (Array.isArray(data)) {
+                // bare list
+                projects = data;
+            } else if (Array.isArray(data.result)) {
+                // { result: [...] }
+                projects = data.result;
+            } else if (Array.isArray(data.results)) {
+                // { results: [...] }
+                projects = data.results;
+            }
+
+            projectListEl.innerHTML = "";
+
+            if (!projects || projects.length === 0) {
+                projectListEl.innerHTML = "<li class='list-group-item'>No projects found.</li>";
+                return;
+            }
+
+            projects.forEach(project => {
+                const li = document.createElement("li");
+                li.className = "list-group-item project-item";
+                li.textContent = project.name;
+                li.dataset.projectId = project.id;
+
+                li.addEventListener("click", () => {
+                    onProjectClicked(project, li);
+                });
+
+                projectListEl.appendChild(li);
+            });
+        } catch (err) {
+            console.error("Error loading projects:", err);
+            projectListEl.innerHTML =
+                "<li class='list-group-item text-danger'>Error loading projects.</li>";
+        }
+    }
+
+    function clearActiveProjectHighlight() {
+        const items = document.querySelectorAll(".project-item");
+        items.forEach(item => item.classList.remove("active"));
+    }
+
+    function onProjectClicked(project, listItemEl) {
+        selectedProjectId = project.id;
+        clearActiveProjectHighlight();
+        listItemEl.classList.add("active");
+        taskHeaderEl.textContent = `Tasks for: ${project.name}`;
+        loadTasksForProject(project.id);
+    }
+
+    // -----------------------------
+    // Load tasks for selected project
+    // -----------------------------
+    async function loadTasksForProject(projectId) {
+        const url = `${TASKS_API}?project=${encodeURIComponent(projectId)}&page=1&page_size=50`;
+
+        try {
+            const data = await fetchJSON(url);
+
+            // Your TaskList returns paginated data:
+            // { results: [...], page, page_size, total_pages, total_items }
+            // but handle a few shapes to be safe.
+            let tasks = [];
+
+            if (Array.isArray(data)) {
+                tasks = data;
+            } else if (Array.isArray(data.results)) {
+                tasks = data.results;
+            } else if (Array.isArray(data.result)) {
+                tasks = data.result;
+            }
+
+            renderTasks(tasks);
+        } catch (err) {
+            console.error("Error loading tasks:", err);
+            taskTableBodyEl.innerHTML = `
+                <tr>
+                    <td colspan="5" class="text-danger">Error loading tasks.</td>
+                </tr>`;
+        }
+    }
+
+    // -----------------------------
+    // Render tasks into table
+    // -----------------------------
+    function renderTasks(tasks) {
+        taskTableBodyEl.innerHTML = "";
+
+        if (!tasks || tasks.length === 0) {
+            taskTableBodyEl.innerHTML = `
+                <tr>
+                    <td colspan="5" class="text-muted">No tasks for this project.</td>
+                </tr>`;
+            return;
+        }
+
+        tasks.forEach(task => {
+            const tr = document.createElement("tr");
+
+            // Title
+            const titleTd = document.createElement("td");
+            titleTd.textContent = task.title;
+            tr.appendChild(titleTd);
+
+            // Status (use display if available, else raw code)
+            const statusTd = document.createElement("td");
+            const statusBadge = document.createElement("span");
+            statusBadge.className = "badge bg-secondary task-status-badge";
+            const statusText = task.status_display || task.status || "-";
+            statusBadge.textContent = statusText;
+            statusTd.appendChild(statusBadge);
+            tr.appendChild(statusTd);
+
+            // Priority (use display if available, else raw code)
+            const priorityTd = document.createElement("td");
+            const priorityBadge = document.createElement("span");
+            priorityBadge.className = "badge bg-light border task-status-badge";
+            const priorityText = task.priority_display || task.priority || "-";
+            priorityBadge.textContent = priorityText;
+            priorityTd.appendChild(priorityBadge);
+            tr.appendChild(priorityTd);
+
+            // Due date
+            const dueTd = document.createElement("td");
+            dueTd.textContent = task.due_date || "-";
+            tr.appendChild(dueTd);
+
+            // Created date (just the YYYY-MM-DD part)
+            const createdTd = document.createElement("td");
+            if (task.created_at && typeof task.created_at === "string") {
+                createdTd.textContent = task.created_at.split("T")[0];
+            } else {
+                createdTd.textContent = "-";
+            }
+            tr.appendChild(createdTd);
+
+            taskTableBodyEl.appendChild(tr);
+        });
+    }
+
+    // -----------------------------
+    // Entry point when page loads
+    // -----------------------------
+    document.addEventListener("DOMContentLoaded", () => {
+        loadProjects();
+    });
+</script>
+</body>
+</html>

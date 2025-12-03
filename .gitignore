@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Django
+db.sqlite3
+*.log
+
+# Environment
+.venv/
+.env
+
+# Node
+askflow-frontend/node_modules/
+askflow-frontend/dist/
+askflow-frontend/build/
+
+# Docker
+*.tar
+
+# OS
+.DS_Store
+
+# Other
+*.tmp
