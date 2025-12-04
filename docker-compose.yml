@@ -16,7 +16,7 @@ services:
       - "3000:80"
     depends_on:
       - backend
-  db:
+    db:
     image: postgres:16
     restart: always
     environment:
@@ -24,5 +24,6 @@ services:
       POSTGRES_USER: askflow
       POSTGRES_PASSWORD: askflow_password123
     volumes:
-      - postgres_data:/var/lib/postgresql/dat
+      - postgres_data:/var/lib/postgresql/data
+
     # No ports exposed to the internet – backend can still reach it by name "db"
