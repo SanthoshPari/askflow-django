@@ -24,6 +24,6 @@ services:
       POSTGRES_USER: askflow
       POSTGRES_PASSWORD: askflow_password123
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      postgres_data:/var/lib/postgresql/data
 
     # No ports exposed to the internet – backend can still reach it by name "db"
